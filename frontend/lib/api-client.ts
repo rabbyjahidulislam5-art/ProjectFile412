@@ -1,5 +1,3 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
-
 export class ApiClientError extends Error {
   readonly status: number;
   readonly details?: unknown;
@@ -19,7 +17,7 @@ interface RequestOptions {
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}/api${path}`, {
+  const response = await fetch(`/api${path}`, {
     method: options.method ?? "GET",
     credentials: "include",
     headers: options.body ? { "Content-Type": "application/json" } : undefined,
