@@ -26,3 +26,16 @@ services:
         value: 7d
       - key: BCRYPT_SALT_ROUNDS
         value: 12
+
+  - type: web
+    name: smart-campus-frontend
+    runtime: node
+    plan: starter
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
