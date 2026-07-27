@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Public and reachable without a session; authenticated visitors are bounced
 // away from these into the app (they're pre-session entry points only).
-const GUEST_ONLY_ROUTES = ["/login", "/register", "/forgot-password"];
+const GUEST_ONLY_ROUTES = ["/login", "/register", "/forgot-password", "/verify-email"];
 
 // Public regardless of session state (no redirect either direction).
 const PUBLIC_ROUTES = ["/"];

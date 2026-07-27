@@ -11,7 +11,9 @@ import type {
   ForgotPasswordInput,
   LoginInput,
   RegisterInput,
+  ResendVerificationInput,
   ResetPasswordInput,
+  VerifyEmailInput,
 } from "./auth.validation";
 
 // Frontend (Vercel) and backend (Render) are different sites in production, so
@@ -41,10 +43,25 @@ async function issueSession(res: Response, user: { id: string; role: UserRole })
 }
 
 export const register = asyncHandler(async (req: Request<unknown, unknown, RegisterInput>, res: Response) => {
-  const user = await authService.registerStudent(req.body);
-  await issueSession(res, user);
-  res.status(201).json({ user });
+  // No session is issued here — the account stays pending until the OTP sent
+  // to the student's university email is verified (see verifyEmail below).
+  const result = await authService.registerStudent(req.body);
+  res.status(201).json(result);
 });
+
+export const verifyEmail = asyncHandler(
+  async (req: Request<unknown, unknown, VerifyEmailInput>, res: Response) => {
+    const result = await authService.verifyEmail(req.body);
+    res.status(200).json(result);
+  },
+);
+
+export const resendVerification = asyncHandler(
+  async (req: Request<unknown, unknown, ResendVerificationInput>, res: Response) => {
+    const result = await authService.resendVerificationOtp(req.body);
+    res.status(200).json(result);
+  },
+);
 
 export const login = asyncHandler(async (req: Request<unknown, unknown, LoginInput>, res: Response) => {
   const user = await authService.login(req.body);

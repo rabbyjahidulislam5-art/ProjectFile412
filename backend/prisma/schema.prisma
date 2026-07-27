@@ -115,6 +115,7 @@ model User {
   department         String?    @db.VarChar(100)
   batch              String?    @db.VarChar(20)
   mustResetPassword  Boolean    @default(false) @map("must_reset_password")
+  emailVerified      Boolean    @default(false) @map("email_verified")
   status             UserStatus @default(active)
   createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz
   updatedAt          DateTime   @updatedAt @map("updated_at") @db.Timestamptz
@@ -122,6 +123,7 @@ model User {
   wallet            Wallet?
   transactions      Transaction[]
   passwordResets    PasswordReset[]
+  emailVerifications EmailVerification[]
   createdShops      Shop[]              @relation("ShopCreatedBy")
   shopStaffLinks    ShopStaff[]
   semesterFees      SemesterFee[]       @relation("SemesterFeeStudent")
@@ -145,7 +147,8 @@ model User {
 model PasswordReset {
   id        String    @id @default(uuid()) @db.Uuid
   userId    String    @map("user_id") @db.Uuid
-  otpCode   String    @map("otp_code") @db.VarChar(6)
+  otpHash   String    @map("otp_hash")
+  attempts  Int       @default(0)
   expiresAt DateTime  @map("expires_at") @db.Timestamptz
   used      Boolean   @default(false)
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
@@ -154,6 +157,24 @@ model PasswordReset {
 
   @@index([userId])
   @@map("password_resets")
+}
+
+// OTP issued at registration to verify a student's university email before
+// the account is activated and a wallet is created (Auth Module addendum —
+// not in the original Module 0 schema, added for mandatory email verification).
+model EmailVerification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  otpHash   String   @map("otp_hash")
+  attempts  Int      @default(0)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("email_verifications")
 }
 
 // ─── WALLET ─────────────────────────────────────────────────────────────────

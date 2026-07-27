@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { env } from "../../config/env";
 
 const password = z
   .string()
@@ -6,6 +7,12 @@ const password = z
   .regex(/[A-Z]/, "Password must contain an uppercase letter")
   .regex(/[a-z]/, "Password must contain a lowercase letter")
   .regex(/[0-9]/, "Password must contain a number");
+
+const otp = z
+  .string()
+  .trim()
+  .length(6, "Enter the 6-digit code")
+  .regex(/^\d{6}$/, "Code must be 6 digits");
 
 export const registerSchema = z
   .object({
@@ -24,11 +31,28 @@ export const registerSchema = z
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match",
     path: ["confirmPassword"],
+  })
+  .refine((data) => data.email.endsWith(`@${env.STUDENT_EMAIL_DOMAIN}`), {
+    message: `Email must be a university address (@${env.STUDENT_EMAIL_DOMAIN})`,
+    path: ["email"],
+  })
+  .refine((data) => (data.email.split("@")[0] ?? "").toLowerCase() === data.studentId.toLowerCase(), {
+    message: "Email must match your Student ID (e.g. 2023-2-60-053@std.ewubd.edu)",
+    path: ["email"],
   });
 
 export const loginSchema = z.object({
   identifier: z.string().trim().min(1, "Student ID or email is required"),
   password: z.string().min(1, "Password is required"),
+});
+
+export const verifyEmailSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  otp,
+});
+
+export const resendVerificationSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
 });
 
 export const forgotPasswordSchema = z.object({
@@ -38,7 +62,7 @@ export const forgotPasswordSchema = z.object({
 export const resetPasswordSchema = z
   .object({
     identifier: z.string().trim().min(1),
-    otp: z.string().length(6, "OTP must be 6 digits"),
+    otp,
     newPassword: password,
     confirmPassword: z.string(),
   })
@@ -63,6 +87,8 @@ export const changePasswordSchema = z
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

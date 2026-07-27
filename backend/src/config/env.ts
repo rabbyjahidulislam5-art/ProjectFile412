@@ -26,6 +26,22 @@ const envSchema = z.object({
   // Shared secret used to sign the outbound checkout handoff and verify the
   // inbound settlement webhook. Must match the value configured at the provider.
   PAYMENT_GATEWAY_SECRET: z.string().min(32, "PAYMENT_GATEWAY_SECRET must be at least 32 characters"),
+
+  // Outbound transactional email (registration OTP, password reset OTP, etc).
+  MAIL_HOST: z.string().min(1).default("smtp.gmail.com"),
+  MAIL_PORT: z.coerce.number().int().positive().default(465),
+  MAIL_USER: z.string().min(1, "MAIL_USER is required"),
+  MAIL_PASSWORD: z.string().min(1, "MAIL_PASSWORD is required"),
+  MAIL_FROM_NAME: z.string().default("Smart Campus"),
+
+  // University email domain students must register/verify with.
+  STUDENT_EMAIL_DOMAIN: z.string().default("std.ewubd.edu"),
+
+  // OTP policy shared by email verification and password reset.
+  OTP_TTL_MINUTES: z.coerce.number().int().positive().default(10),
+  OTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
+  OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().positive().default(60),
+  OTP_MAX_SENDS_PER_HOUR: z.coerce.number().int().positive().default(5),
 });
 
 const parsed = envSchema.safeParse(process.env);

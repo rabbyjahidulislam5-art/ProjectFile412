@@ -11,6 +11,7 @@ export interface AuthUser {
   department: string | null;
   batch: string | null;
   mustResetPassword: boolean;
+  emailVerified: boolean;
   status: "active" | "suspended";
   createdAt: string;
 }
