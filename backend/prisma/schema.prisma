@@ -1,0 +1,415 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ──────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  student
+  admin_office
+  library
+  accounts_office
+  shop_staff
+}
+
+enum UserStatus {
+  active
+  suspended
+}
+
+enum TransactionType {
+  deposit
+  shop_payment
+  fine_payment
+  fee_payment
+  prepaid_purchase
+  postpaid_settlement
+  refund
+  waiver_adjustment
+  mass_payment
+}
+
+enum TransactionDirection {
+  credit
+  debit
+}
+
+enum TransactionStatus {
+  pending
+  success
+  failed
+}
+
+enum ReferenceType {
+  shop
+  semester_fee
+  library_fine
+  admin_fine
+  prepaid_plan
+  postpaid_tab
+}
+
+enum ShopCategory {
+  food_beverage
+  stationery
+  printing
+  other
+}
+
+enum ShopStatus {
+  active
+  suspended
+  removed
+}
+
+enum DueStatus {
+  pending
+  paid
+  waived
+}
+
+enum LibraryFineType {
+  late
+  lost
+}
+
+enum FineSource {
+  library
+  admin
+}
+
+enum WaiverStatus {
+  pending
+  approved
+  reduced
+  rejected
+}
+
+enum PrepaidBalanceStatus {
+  active
+  expired
+}
+
+enum PostpaidTabStatus {
+  open
+  billed
+  paid
+}
+
+// ─── USERS & AUTH ───────────────────────────────────────────────────────────
+
+model User {
+  id                 String     @id @default(uuid()) @db.Uuid
+  role               UserRole
+  studentId          String?    @unique @map("student_id") @db.VarChar(20)
+  employeeId         String?    @unique @map("employee_id") @db.VarChar(20)
+  fullName           String     @map("full_name") @db.VarChar(150)
+  email              String     @unique @db.VarChar(150)
+  phone              String?    @db.VarChar(20)
+  passwordHash       String     @map("password_hash")
+  department         String?    @db.VarChar(100)
+  batch              String?    @db.VarChar(20)
+  mustResetPassword  Boolean    @default(false) @map("must_reset_password")
+  status             UserStatus @default(active)
+  createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  wallet            Wallet?
+  transactions      Transaction[]
+  passwordResets    PasswordReset[]
+  createdShops      Shop[]              @relation("ShopCreatedBy")
+  shopStaffLinks    ShopStaff[]
+  semesterFees      SemesterFee[]       @relation("SemesterFeeStudent")
+  assignedFees      SemesterFee[]       @relation("SemesterFeeAssignedBy")
+  libraryFines      LibraryFine[]       @relation("LibraryFineStudent")
+  assignedLibraryFines LibraryFine[]    @relation("LibraryFineAssignedBy")
+  adminFines        AdminFine[]         @relation("AdminFineStudent")
+  assignedAdminFines AdminFine[]        @relation("AdminFineAssignedBy")
+  requestedWaivers  FineWaiver[]        @relation("WaiverRequestedBy")
+  reviewedWaivers   FineWaiver[]        @relation("WaiverReviewedBy")
+  prepaidBalances   PrepaidBalance[]
+  postpaidTabs      PostpaidTab[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+
+  @@index([role])
+  @@index([email])
+  @@map("users")
+}
+
+model PasswordReset {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  otpCode   String    @map("otp_code") @db.VarChar(6)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  used      Boolean   @default(false)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_resets")
+}
+
+// ─── WALLET ─────────────────────────────────────────────────────────────────
+
+model Wallet {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  balance   Decimal  @default(0) @db.Decimal(12, 2)
+  currency  String   @default("BDT") @db.VarChar(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@map("wallets")
+}
+
+model Transaction {
+  id            String                @id @default(uuid()) @db.Uuid
+  walletId      String                @map("wallet_id") @db.Uuid
+  userId        String                @map("user_id") @db.Uuid
+  type          TransactionType
+  direction     TransactionDirection
+  amount        Decimal               @db.Decimal(12, 2)
+  referenceType ReferenceType?        @map("reference_type")
+  referenceId   String?               @map("reference_id") @db.Uuid
+  shopId        String?               @map("shop_id") @db.Uuid
+  gateway       String?               @db.VarChar(20)
+  gatewayRef    String?               @map("gateway_ref") @db.VarChar(100)
+  status        TransactionStatus     @default(pending)
+  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+  shop   Shop?  @relation(fields: [shopId], references: [id])
+
+  @@index([userId])
+  @@index([walletId])
+  @@index([shopId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("transactions")
+}
+
+// ─── SHOPS ──────────────────────────────────────────────────────────────────
+
+model Shop {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String       @db.VarChar(150)
+  category  ShopCategory
+  logoUrl   String?      @map("logo_url")
+  rating    Decimal      @default(0) @db.Decimal(2, 1)
+  status    ShopStatus   @default(active)
+  qrToken   String       @unique @map("qr_token") @db.VarChar(100)
+  createdBy String       @map("created_by") @db.Uuid
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  creator         User              @relation("ShopCreatedBy", fields: [createdBy], references: [id])
+  staff           ShopStaff[]
+  transactions    Transaction[]
+  prepaidPlans    PrepaidPlan[]
+  prepaidBalances PrepaidBalance[]
+  postpaidTabs    PostpaidTab[]
+
+  @@index([status])
+  @@index([category])
+  @@map("shops")
+}
+
+model ShopStaff {
+  id        String   @id @default(uuid()) @db.Uuid
+  shopId    String   @map("shop_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, userId])
+  @@index([userId])
+  @@map("shop_staff")
+}
+
+// ─── DUES & FINES ───────────────────────────────────────────────────────────
+
+model SemesterFee {
+  id         String    @id @default(uuid()) @db.Uuid
+  studentId  String    @map("student_id") @db.Uuid
+  amount     Decimal   @db.Decimal(12, 2)
+  dueDate    DateTime? @map("due_date") @db.Date
+  status     DueStatus @default(pending)
+  assignedBy String    @map("assigned_by") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  student  User @relation("SemesterFeeStudent", fields: [studentId], references: [id])
+  assigner User @relation("SemesterFeeAssignedBy", fields: [assignedBy], references: [id])
+
+  @@index([studentId])
+  @@index([status])
+  @@map("semester_fees")
+}
+
+model LibraryFine {
+  id         String          @id @default(uuid()) @db.Uuid
+  studentId  String          @map("student_id") @db.Uuid
+  fineType   LibraryFineType @map("fine_type")
+  amount     Decimal         @db.Decimal(12, 2)
+  dueDate    DateTime?       @map("due_date") @db.Date
+  status     DueStatus       @default(pending)
+  assignedBy String          @map("assigned_by") @db.Uuid
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  student  User @relation("LibraryFineStudent", fields: [studentId], references: [id])
+  assigner User @relation("LibraryFineAssignedBy", fields: [assignedBy], references: [id])
+
+  @@index([studentId])
+  @@index([status])
+  @@map("library_fines")
+}
+
+model AdminFine {
+  id           String    @id @default(uuid()) @db.Uuid
+  studentId    String    @map("student_id") @db.Uuid
+  reason       String?
+  amount       Decimal   @db.Decimal(12, 2)
+  incidentDate DateTime? @map("incident_date") @db.Date
+  status       DueStatus @default(pending)
+  assignedBy   String    @map("assigned_by") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  student  User @relation("AdminFineStudent", fields: [studentId], references: [id])
+  assigner User @relation("AdminFineAssignedBy", fields: [assignedBy], references: [id])
+
+  @@index([studentId])
+  @@index([status])
+  @@map("admin_fines")
+}
+
+model FineWaiver {
+  id           String       @id @default(uuid()) @db.Uuid
+  fineSource   FineSource   @map("fine_source")
+  fineId       String       @map("fine_id") @db.Uuid
+  requestedBy  String       @map("requested_by") @db.Uuid
+  reason       String?
+  status       WaiverStatus @default(pending)
+  reviewedBy   String?      @map("reviewed_by") @db.Uuid
+  reviewedAt   DateTime?    @map("reviewed_at") @db.Timestamptz
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  requester User  @relation("WaiverRequestedBy", fields: [requestedBy], references: [id])
+  reviewer  User? @relation("WaiverReviewedBy", fields: [reviewedBy], references: [id])
+
+  @@index([fineSource, fineId])
+  @@index([status])
+  @@map("fine_waivers")
+}
+
+// ─── FOOD SHOP BILLING ──────────────────────────────────────────────────────
+
+model PrepaidPlan {
+  id           String   @id @default(uuid()) @db.Uuid
+  shopId       String   @map("shop_id") @db.Uuid
+  name         String   @db.VarChar(100)
+  price        Decimal  @db.Decimal(12, 2)
+  validityDays Int      @map("validity_days")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  shop     Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  balances PrepaidBalance[]
+
+  @@index([shopId])
+  @@map("prepaid_plans")
+}
+
+model PrepaidBalance {
+  id        String                @id @default(uuid()) @db.Uuid
+  studentId String                @map("student_id") @db.Uuid
+  shopId    String                @map("shop_id") @db.Uuid
+  planId    String                @map("plan_id") @db.Uuid
+  balance   Decimal               @default(0) @db.Decimal(12, 2)
+  expiresAt DateTime?             @map("expires_at") @db.Timestamptz
+  status    PrepaidBalanceStatus  @default(active)
+  createdAt DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime              @updatedAt @map("updated_at") @db.Timestamptz
+
+  student User        @relation(fields: [studentId], references: [id])
+  shop    Shop        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  plan    PrepaidPlan @relation(fields: [planId], references: [id])
+
+  @@index([studentId, shopId])
+  @@index([status])
+  @@map("prepaid_balances")
+}
+
+model PostpaidTab {
+  id           String            @id @default(uuid()) @db.Uuid
+  studentId    String            @map("student_id") @db.Uuid
+  shopId       String            @map("shop_id") @db.Uuid
+  monthPeriod  String            @map("month_period") @db.VarChar(7)
+  totalAmount  Decimal           @default(0) @map("total_amount") @db.Decimal(12, 2)
+  status       PostpaidTabStatus @default(open)
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz
+
+  student User               @relation(fields: [studentId], references: [id])
+  shop    Shop               @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  charges PostpaidCharge[]
+
+  @@unique([studentId, shopId, monthPeriod])
+  @@index([status])
+  @@map("postpaid_tabs")
+}
+
+model PostpaidCharge {
+  id              String   @id @default(uuid()) @db.Uuid
+  tabId           String   @map("tab_id") @db.Uuid
+  amount          Decimal  @db.Decimal(12, 2)
+  description     String?  @db.VarChar(150)
+  authorizedViaQr Boolean  @default(true) @map("authorized_via_qr")
+  chargedAt       DateTime @default(now()) @map("charged_at") @db.Timestamptz
+
+  tab PostpaidTab @relation(fields: [tabId], references: [id], onDelete: Cascade)
+
+  @@index([tabId])
+  @@map("postpaid_charges")
+}
+
+// ─── NOTIFICATIONS & AUDIT ──────────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  type      String?  @db.VarChar(30)
+  title     String?  @db.VarChar(150)
+  body      String?
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  actorUserId  String?  @map("actor_user_id") @db.Uuid
+  action       String   @db.VarChar(50)
+  entityType   String?  @map("entity_type") @db.VarChar(50)
+  entityId     String?  @map("entity_id") @db.Uuid
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  actor User? @relation(fields: [actorUserId], references: [id])
+
+  @@index([actorUserId])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
